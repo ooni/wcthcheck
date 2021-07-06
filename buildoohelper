@@ -1,5 +1,9 @@
 #!/bin/sh
-set -ex
+set -e
+if [ -x oohelper ]; then
+  exit 0
+fi
+set -x
 git clone https://github.com/ooni/probe-cli
 cd probe-cli
 git checkout 3747598b4a7f2afd0f599029f7ab411984bd0b86
