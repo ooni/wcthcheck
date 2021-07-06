@@ -1,0 +1,8 @@
+#!/bin/sh
+set -ex
+git clone https://github.com/ooni/probe-cli
+cd probe-cli
+git checkout 3747598b4a7f2afd0f599029f7ab411984bd0b86
+go build -o ../oohelper ./internal/cmd/oohelper
+cd ..
+rm -rf probe-cli
