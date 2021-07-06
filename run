@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+
+import datetime
+import json
+import sqlite3
+import subprocess
+import sys
+import time
+
+from typing import Dict
+from typing import List
+from typing import Tuple
+
+
+class Main:
+    "This is the main class."
+
+    __helpers = [
+        "https://1.th.ooni.org/",
+        "https://wcth.ooni.io/",
+    ]
+
+    def __init__(self):
+        self._conn = sqlite3.connect("database.sqlite3")
+        self._known_urls: Dict[Tuple[str, str], bool] = {}
+        cur = self._conn.execute("select backend, target from results;")
+        for entry in cur:
+            backend: str = str(entry[0])
+            target: str = str(entry[1])
+            self._known_urls[(backend, target)] = True
+        self._exec(["./buildoohelper"])  # idempotent script
+
+    def _exec(self, args: List[str]):
+        print("exec:", args, file=sys.stderr)
+        subprocess.run(args, check=True)
+
+    def run(self):
+        """walks the test lists and fetches URLs using the
+        available test helpers."""
+        for line in open("alltestlists.txt"):
+            line = line.strip()
+            for helper in self.__helpers:
+                self._run_with_single_helper(helper, line)
+
+    def _run_with_single_helper(self, backend_url: str, target_url: str):
+        if (backend_url, target_url) in self._known_urls:
+            return
+        try:
+            self._run_with_single_helper_internal(backend_url, target_url)
+        except Exception as exc:
+            print(exc, file=sys.stderr)
+        time.sleep(5)
+
+    def _run_with_single_helper_internal(self, backend_url: str, target_url: str):
+        date = datetime.datetime.now().astimezone().isoformat()
+        out = self._exec_and_get_output(
+            [
+                "./oohelper",
+                "-target",
+                target_url,
+                "-server",
+                backend_url,
+            ]
+        )
+        json.loads(out)  # ensure it's valid JSON
+        self._conn.execute(
+            """INSERT INTO results VALUES(?, ?, ?, ?)""",
+            (date, backend_url, target_url, out),
+        )
+        self._conn.commit()
+
+    def _exec_and_get_output(self, args: List[str]) -> bytes:
+        print("exec:", args, file=sys.stderr)
+        return subprocess.run(args, check=True, stdout=subprocess.PIPE).stdout
+
+
+def main():
+    "Main function."
+    main = Main()
+    main.run()
+
+
+if __name__ == "__main__":
+    main()
