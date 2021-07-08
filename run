@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import random
 import sqlite3
 import subprocess
 import sys
@@ -37,7 +38,9 @@ class Main:
     def run(self):
         """walks the test lists and fetches URLs using the
         available test helpers."""
-        for line in open("alltestlists.txt"):
+        lines = [line for line in open("alltestlists.txt")]
+        random.shuffle(lines)
+        for line in lines:
             line = line.strip()
             for helper in self.__helpers:
                 self._run_with_single_helper(helper, line)
@@ -49,7 +52,6 @@ class Main:
             self._run_with_single_helper_internal(backend_url, target_url)
         except Exception as exc:
             print(exc, file=sys.stderr)
-        time.sleep(5)
 
     def _run_with_single_helper_internal(self, backend_url: str, target_url: str):
         date = datetime.datetime.now().astimezone().isoformat()
