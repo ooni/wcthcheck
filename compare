@@ -55,7 +55,7 @@ class Main:
         new_data = self._filter_tcp_connect(new_data)
         if old_data == new_data:
             return
-        print('"===== BEING TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
+        print('"===== BEGIN TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
         print(old_data)
         print(new_data)
         print('"===== END TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
@@ -83,7 +83,7 @@ class Main:
         if old_data == new_data:
             return
         print(
-            '"===== BEING HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR',
+            '"===== BEGIN HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR',
             target_url,
             '====="',
         )
@@ -97,7 +97,7 @@ class Main:
         old_data, new_data = old_data["failure"], new_data["failure"]
         if old_data == new_data:
             return
-        print('"===== BEING HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="')
+        print('"===== BEGIN HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="')
         print(old_data)
         print(new_data)
         print('"===== END HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="')
@@ -106,7 +106,7 @@ class Main:
         old_data, new_data = old_data["title"], new_data["title"]
         if old_data == new_data:
             return
-        print('"===== BEING HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
+        print('"===== BEGIN HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
         print(old_data)
         print(new_data)
         print('"===== END HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
@@ -125,7 +125,7 @@ class Main:
                 diff.append(("+", v))
         if not diff:
             return
-        print('"===== BEING HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="')
+        print('"===== BEGIN HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="')
         for mod, val in diff:
             print(mod, val)
         print('"===== END HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="')
@@ -135,7 +135,7 @@ class Main:
         if old_data == new_data:
             return
         print(
-            '"===== BEING HTTP_REQUEST.STATUS_CODE DIFFERENCES FOR',
+            '"===== BEGIN HTTP_REQUEST.STATUS_CODE DIFFERENCES FOR',
             target_url,
             '====="',
         )
@@ -149,7 +149,7 @@ class Main:
         old_data, new_data = old_data["dns"], new_data["dns"]
         if old_data == new_data:
             return
-        print('"===== BEING DNS DIFFERENCES FOR', target_url, '====="')
+        print('"===== BEGIN DNS DIFFERENCES FOR', target_url, '====="')
         print(old_data)
         print(new_data)
         print('"===== END DNS DIFFERENCES FOR', target_url, '====="')
