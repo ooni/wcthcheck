@@ -145,25 +145,23 @@ class Main:
             self._log('"===== END HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
 
     def _compare_http_headers(self, target_url: str, old_data: Any, new_data: Any):
+        # Implementation note: here we only compare the header keys under
+        # the (reasonable?) assumption it is hard to compare values
         old_data, new_data = old_data["headers"], new_data["headers"]
+        if old_data is None and new_data is None:
+            return
         if old_data is None or new_data is None:
-            return  # we had many issues here (why?!)
+            self._increment_counter_for("http_headers")
+            return
+        old_data = set([k.lower() for k in old_data.keys()])
+        new_data = set([k.lower() for k in new_data.keys()])
         diff: Any = []
-        for tpl in old_data:
-            if len(tpl) != 2:
-                continue  # we had many issues here (why?!)
-            k, v = tpl
+        for k in old_data:
             if k not in new_data:
-                diff.append(("-", v))
-            elif v != new_data[k]:
-                diff.append(("-", v))
-                diff.append(("+", new_data[k]))
-        for tpl in new_data:
-            if len(tpl) != 2:
-                continue  # we had many issues here (why?!)
-            k, v = tpl
+                diff.append(("-", k))
+        for k in new_data:
             if k not in old_data:
-                diff.append(("+", v))
+                diff.append(("+", k))
         if not diff:
             return
         self._increment_counter_for("http_headers")
