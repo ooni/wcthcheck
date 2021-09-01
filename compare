@@ -171,7 +171,7 @@ class Main:
         )
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
-        old_data, new_data = old_data["dns"], new_data["dns"]
+        old_data, new_data = sorted(old_data["dns"]), sorted(new_data["dns"])
         if old_data == new_data:
             return
         self._increment_counter_for("dns")
