@@ -52,7 +52,7 @@ class Main:
                 self._increment_counter_for("processing_failed")
             else:
                 self._increment_counter_for("processing_succeeded")
-        json.dump(self._stats, sys.stdout)
+        json.dump(self._stats, sys.stdout, sort_keys=True)
 
     def _run_with_url(self, target_url: str):
         old_id = (self.__old_test_helper, target_url)
@@ -78,20 +78,41 @@ class Main:
         old_data, new_data = old_data["tcp_connect"], new_data["tcp_connect"]
         old_data = self._filter_tcp_connect(old_data)
         new_data = self._filter_tcp_connect(new_data)
-        if old_data == new_data:
+        diff: Any = []
+        for epnt, result in old_data.items():
+            if epnt not in new_data:
+                self._increment_counter_for("tcp_connect/removed_ivp4")
+                diff.append(("-", epnt))
+            elif result != new_data[epnt]:
+                self._increment_counter_for("tcp_connect/different_ivp4")
+                diff.append(("!", epnt))
+        for epnt, result in new_data.items():
+            if epnt not in old_data:
+                self._increment_counter_for("tcp_connect/added_ivp4")
+                diff.append(("+", epnt))
+        if not diff:
             return
         self._increment_counter_for("tcp_connect")
         if self.__log_tcp_connect:
             self._log('"===== BEGIN TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
-            self._log(old_data)
-            self._log(new_data)
+            self._log(diff)
             self._log('"===== END TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
 
     def _filter_tcp_connect(self, data: Any) -> Any:
         out: Dict[Any, Any] = {}
         for k, v in data.items():
             if k.startswith("["):
+                # Here we are skipping IPv6 addresses _because_ we know
+                # the old test helper cannot handle them.
                 continue
+            if v["failure"] == "connection_refused_error":
+                # Here we are normalizing the values returned by the
+                # legacy TH to be the same of the new TH. Ugly.
+                v["failure"] = "connection_refused"
+            if v["failure"] is not None and v["failure"].endswith("no route to host"):
+                # Here we are normalizing the values returned by the
+                # new TH to be the same of the old TH. Ugly.
+                v["failure"] = "connect_error"
             out[k] = v
         return out
 
