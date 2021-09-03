@@ -94,6 +94,7 @@ class Main:
             return
         self._increment_counter_for("tcp_connect")
         if self.__log_tcp_connect:
+            self._log("!!! TCP_CONNECT", target_url)
             self._log('"===== BEGIN TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
             self._log(diff)
             self._log('"===== END TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
