@@ -130,7 +130,13 @@ class Main:
         old_data, new_data = old_data["body_length"], new_data["body_length"]
         if old_data == new_data:
             return
+        if old_data == -1:
+            old_data = 0  # This is a bug in the new TH implementation
         self._increment_counter_for("http_body_length")
+        if old_data < new_data:
+            self._increment_counter_for("http_body_length/new_th_smaller")
+        else:
+            self._increment_counter_for("http_body_length/new_th_larger")
         if self.__log_http_request_body_length:
             self._log(
                 '"===== BEGIN HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR',
