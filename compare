@@ -165,6 +165,8 @@ class Main:
         if old_data == new_data:
             return
         self._increment_counter_for("http_title")
+        if len(old_data) < len(new_data):
+            self._increment_counter_for("http_title/old_th_smaller")
         if self.__log_http_request_title:
             self._log('"===== BEGIN HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
             self._log(old_data)
