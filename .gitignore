@@ -1,2 +1,4 @@
-/database.sqlite3
+/*.sqlite3
+/config*.json
+/input*.txt
 /oohelper

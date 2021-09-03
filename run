@@ -20,13 +20,13 @@ from typing import Tuple
 class Main:
     "This is the main class."
 
-    __helpers = [
-        "https://1.th.ooni.org/",
-        "https://wcth.ooni.io/",
-    ]
-
-    def __init__(self):
-        self._conn = sqlite3.connect("database.sqlite3")
+    def __init__(self, config_file: str):
+        self._config = json.load(open(config_file))
+        self._conn = sqlite3.connect(self._config["database"])
+        self._conn.execute(
+            """CREATE TABLE IF NOT EXISTS results(
+                date text, backend text, target text, json text);"""
+        )
         self._known_urls: Dict[Tuple[str, str], bool] = {}
         cur = self._conn.execute("select backend, target from results;")
         for entry in cur:
@@ -42,11 +42,11 @@ class Main:
     def run(self):
         """walks the test lists and fetches URLs using the
         available test helpers."""
-        lines = [line for line in open("alltestlists.txt")]
+        lines = [line for line in open(self._config["input_file"])]
         random.shuffle(lines)
         for line in lines:
             line = line.strip()
-            for helper in self.__helpers:
+            for helper in self._config["helpers"]:
                 self._run_with_single_helper(helper, line)
 
     def _run_with_single_helper(self, backend_url: str, target_url: str):
@@ -82,7 +82,9 @@ class Main:
 
 def main():
     "Main function."
-    main = Main()
+    if len(sys.argv) != 2:
+        sys.exit("usage: ./run <config-file>")
+    main = Main(sys.argv[1])
     main.run()
 
 
