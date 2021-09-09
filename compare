@@ -15,18 +15,6 @@ from typing import Tuple
 class Main:
     "This is the main class."
 
-    __log_tcp_connect = False
-
-    __log_http_request_body_length = False
-
-    __log_http_request_failure = False
-
-    __log_http_request_title = False
-
-    __log_http_request_headers = False
-
-    __log_http_request_status_code = False
-
     def __init__(self, config_file: str):
         self._mmdb = maxminddb.open_database("dbip-asn-lite-2021-09.mmdb")
         self._config = json.load(open(config_file))
@@ -57,13 +45,14 @@ class Main:
     def _run_with_url(self, target_url: str):
         old_id = (self._config["helpers"]["old"], target_url)
         if old_id not in self._data:
-            self._increment_counter_for("processing/missing_oldth_measurement")
+            self._increment_counter_for("processing/mismatch/missing_oldth_measurement")
             return
         old_data = self._data[old_id]
         new_id = (self._config["helpers"]["new"], target_url)
         if new_id not in self._data:
-            self._increment_counter_for("processing/missing_newth_measurement")
+            self._increment_counter_for("processing/mismatch/missing_newth_measurement")
             return
+        self._increment_counter_for("processing/match/has_both_measurements")
         new_data = self._data[new_id]
         self._compare_tcp_connect(target_url, old_data, new_data)
         self._compare_http_request(target_url, old_data, new_data)
@@ -77,29 +66,26 @@ class Main:
         print(*args, file=sys.stderr)
 
     def _compare_tcp_connect(self, target_url: str, old_data: Any, new_data: Any):
+        self._increment_counter_for("tcp_connect/total")
         old_data, new_data = old_data["tcp_connect"], new_data["tcp_connect"]
         old_data = self._filter_tcp_connect(old_data)
         new_data = self._filter_tcp_connect(new_data)
         diff: Any = []
         for epnt, result in old_data.items():
             if epnt not in new_data:
-                self._increment_counter_for("tcp_connect/removed_ivp4")
+                self._increment_counter_for("tcp_connect/mismatch/removed_ivp4")
                 diff.append(("-", epnt))
             elif result != new_data[epnt]:
-                self._increment_counter_for("tcp_connect/different_ivp4")
+                self._increment_counter_for("tcp_connect/mismatch/different_ivp4")
                 diff.append(("!", epnt))
         for epnt, result in new_data.items():
             if epnt not in old_data:
-                self._increment_counter_for("tcp_connect/added_ivp4")
+                self._increment_counter_for("tcp_connect/mismatch/added_ivp4")
                 diff.append(("+", epnt))
         if not diff:
+            self._increment_counter_for("tcp_connect/match")
             return
-        self._increment_counter_for("tcp_connect")
-        if self.__log_tcp_connect:
-            self._log("!!! TCP_CONNECT", target_url)
-            self._log('"===== BEGIN TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
-            self._log(diff)
-            self._log('"===== END TCP_CONNECT DIFFERENCES FOR', target_url, '====="')
+        self._increment_counter_for("tcp_connect/mismatch")
 
     def _filter_tcp_connect(self, data: Any) -> Any:
         out: Dict[Any, Any] = {}
@@ -130,123 +116,121 @@ class Main:
         self._compare_http_status_code(target_url, old_data, new_data)
 
     def _compare_http_body_length(self, target_url: str, old_data: Any, new_data: Any):
+        self._increment_counter_for("http_body_length/total")
         old_data, new_data = old_data["body_length"], new_data["body_length"]
         if old_data == new_data:
             return
         if old_data == -1:
             old_data = 0  # This is a bug in the new TH implementation
-        self._increment_counter_for("http_body_length")
+        self._increment_counter_for("http_body_length/diff")
         if old_data < new_data:
-            self._increment_counter_for("http_body_length/new_th_smaller")
+            self._increment_counter_for("http_body_length/diff/new_th_smaller")
         else:
-            self._increment_counter_for("http_body_length/new_th_larger")
-        if self.__log_http_request_body_length:
-            self._log(
-                '"===== BEGIN HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR',
-                target_url,
-                '====="',
-            )
-            self._log(old_data)
-            self._log(new_data)
-            self._log(
-                '"===== END HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR',
-                target_url,
-                '====="',
-            )
+            self._increment_counter_for("http_body_length/diff/new_th_larger")
 
     def _compare_http_failure(self, target_url: str, old_data: Any, new_data: Any):
+        self._increment_counter_for("http_failure/total")
         old_data, new_data = old_data["failure"], new_data["failure"]
         if old_data == new_data:
+            self._increment_counter_for("http_failure/match")
             return
-        self._increment_counter_for("http_failure")
-        if self.__log_http_request_failure:
-            self._log(
-                '"===== BEGIN HTTP_REQUEST.FAILURE DIFFERENCES FOR',
-                target_url,
-                '====="',
-            )
-            self._log(old_data)
-            self._log(new_data)
-            self._log(
-                '"===== END HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="'
-            )
+        self._increment_counter_for("http_failure/mismatch")
+        if old_data is None and new_data is not None:
+            self._increment_counter_for("http_failure/mismatch/old_is_none")
+            return
+        if old_data is not None and new_data is None:
+            self._increment_counter_for("http_failure/mismatch/new_is_none")
+            return
+        self._increment_counter_for("http_failure/mismatch/other")
 
     def _compare_http_title(self, target_url: str, old_data: Any, new_data: Any):
+        self._increment_counter_for("http_title/total")
         old_data, new_data = old_data["title"], new_data["title"]
         if old_data == new_data:
+            self._increment_counter_for("http_title/match")
             return
-        self._increment_counter_for("http_title")
+        self._increment_counter_for("http_title/mismatch/total")
         if len(old_data) < len(new_data):
-            self._increment_counter_for("http_title/old_th_smaller")
-        if self.__log_http_request_title:
-            self._log(
-                '"===== BEGIN HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="'
-            )
-            self._log(old_data)
-            self._log(new_data)
-            self._log(
-                '"===== END HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="'
-            )
+            self._increment_counter_for("http_title/mismatch/old_th_smaller")
+            return
+        self._increment_counter_for("http_title/mismatch/other")
 
     def _compare_http_headers(self, target_url: str, old_data: Any, new_data: Any):
         # Implementation note: here we only compare the header keys under
         # the (reasonable?) assumption it is hard to compare values
+        self._increment_counter_for("http_headers/total")
         old_data, new_data = old_data["headers"], new_data["headers"]
         if old_data is None and new_data is None:
+            self._increment_counter_for("http_headers/match/both_none")
             return
-        if old_data is None or new_data is None:
-            self._increment_counter_for("http_headers")
+        if old_data is None:
+            self._increment_counter_for("http_headers/mismatch/old_is_none")
+            return
+        if new_data is None:
+            self._increment_counter_for("http_headers/mismatch/new_is_none")
             return
         old_data = set([k.lower() for k in old_data.keys()])
         new_data = set([k.lower() for k in new_data.keys()])
-        diff: Any = []
-        for k in old_data:
-            if k not in new_data:
-                diff.append(("-", k))
-        for k in new_data:
-            if k not in old_data:
-                diff.append(("+", k))
-        if not diff:
+        common_headers = set([
+		    "date",
+		    "content-type",
+		    "server",
+		    "cache-control",
+		    "vary",
+		    "set-cookie",
+	    	"location",
+		    "expires",
+		    "x-powered-by",
+		    "content-encoding",
+	    	"last-modified",
+	    	"accept-ranges",
+	    	"pragma",
+	    	"x-frame-options",
+	    	"etag",
+	    	"x-content-type-options",
+	    	"age",
+	    	"via",
+	    	"p3p",
+	    	"x-xss-protection",
+	    	"content-language",
+	    	"cf-ray",
+	    	"strict-transport-security",
+	    	"link",
+	    	"x-varnish",
+        ])
+        # We limit comparison to just the headers that probes
+        # will consider to choose whether there's blocking
+        old_data = old_data - common_headers
+        new_data = new_data - common_headers
+        uncommon_headers_that_feels_safe_filtering = set([
+            "content-length",
+            "connection",
+        ])
+        old_data = old_data - uncommon_headers_that_feels_safe_filtering
+        new_data = new_data - uncommon_headers_that_feels_safe_filtering
+        header_diff = old_data ^ new_data
+        if not header_diff:
+            self._increment_counter_for("http_headers/match/same_set")
             return
-        self._increment_counter_for("http_headers")
-        if self.__log_http_request_headers:
-            self._log(
-                '"===== BEGIN HTTP_REQUEST.HEADERS DIFFERENCES FOR',
-                target_url,
-                '====="',
-            )
-            for mod, val in diff:
-                self._log(mod, val)
-            self._log(
-                '"===== END HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="'
-            )
+        self._increment_counter_for("http_headers/mismatch/set_diff")
+        #self._log(target_url, header_diff, file=sys.stderr)
 
     def _compare_http_status_code(self, target_url: str, old_data: Any, new_data: Any):
+        self._increment_counter_for("http_status_code/total")
         old_data, new_data = old_data["status_code"], new_data["status_code"]
         if old_data == new_data:
+            self._increment_counter_for("http_status_code/match")
             return
-        self._increment_counter_for("http_status_code")
-        if self.__log_http_request_status_code:
-            self._log(
-                '"===== BEGIN HTTP_REQUEST.STATUS_CODE DIFFERENCES FOR',
-                target_url,
-                '====="',
-            )
-            self._log(old_data)
-            self._log(new_data)
-            self._log(
-                '"===== END HTTP_REQUEST.STATUS_CODE DIFFERENCES FOR',
-                target_url,
-                '====="',
-            )
+        self._increment_counter_for("http_status_code/mismatch")
+        self._log(target_url, old_data, new_data)
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("dns/total")
         if old_data["dns"]["addrs"] is None:
-            self._increment_counter_for("dns/old_data_none_addrs")
+            self._increment_counter_for("dns/mismatch/old_data_none_addrs")
             return
         if new_data["dns"]["addrs"] is None:
-            self._increment_counter_for("dns/new_data_none_addrs")
+            self._increment_counter_for("dns/mismatch/new_data_none_addrs")
             return
         old_data = old_data["dns"]["addrs"]
         new_data = new_data["dns"]["addrs"]
@@ -254,25 +238,25 @@ class Main:
         new_data = self._clean_dns_data(new_data)
         old_data, new_data = sorted(old_data), sorted(new_data)
         if old_data == new_data:
-            self._increment_counter_for("dns/okay")
+            self._increment_counter_for("dns/match/exactly")
             return
         try:
             diff = self._asn_intersection(old_data, new_data)
         except ValueError:
-            self._increment_counter_for("dns/cannot_map_to_asn")
+            self._increment_counter_for("dns/mismatch/cannot_map_to_asn")
             return
         if not diff:
-            self._increment_counter_for("dns/same_asn")
+            self._increment_counter_for("dns/match/same_asn")
             return
         try:
             diff = self._org_intersection(old_data, new_data)
         except ValueError:
-            self._increment_counter_for("dns/cannot_map_to_org")
+            self._increment_counter_for("dns/mismatch/cannot_map_to_org")
             return
         if not diff:
-            self._increment_counter_for("dns/same_org")
+            self._increment_counter_for("dns/match/same_org")
             return
-        self._increment_counter_for("dns/diffs")
+        self._increment_counter_for("dns/mismatch/other")
         only_old_data = set(old_data) - set(new_data)
         only_new_data = set(new_data) - set(old_data)
         #
@@ -319,6 +303,8 @@ class Main:
         # is telling lies to our recursive resolver, which
         # _interestingly_ is something Federico mentioned to
         # me exactly today. This requires digging in!
+        #
+        # See https://github.com/ooni/probe/issues/1780
         #
         self._log(
             "dns/diffs",
