@@ -46,7 +46,7 @@ class Main:
         random.shuffle(lines)
         for line in lines:
             line = line.strip()
-            for helper in self._config["helpers"]:
+            for helper in self._config["helpers"].values():
                 self._run_with_single_helper(helper, line)
 
     def _run_with_single_helper(self, backend_url: str, target_url: str):
