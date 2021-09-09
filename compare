@@ -27,8 +27,6 @@ class Main:
 
     __log_http_request_status_code = False
 
-    __log_dns = False
-
     def __init__(self, config_file: str):
         self._mmdb = maxminddb.open_database("dbip-asn-lite-2021-09.mmdb")
         self._config = json.load(open(config_file))
@@ -275,12 +273,71 @@ class Main:
             self._increment_counter_for("dns/same_org")
             return
         self._increment_counter_for("dns/diffs")
-        if self.__log_dns:
-            self._log("!!! DNS", target_url)
-            self._log('"===== BEGIN DNS DIFFERENCES FOR', target_url, '====="')
-            self._log(old_data)
-            self._log(new_data)
-            self._log('"===== END DNS DIFFERENCES FOR', target_url, '====="')
+        only_old_data = set(old_data) - set(new_data)
+        only_new_data = set(new_data) - set(old_data)
+        #
+        # Important note regarding the differences I see. I was
+        # under the assumption that the test helper was using
+        # 8.8.8.8:53 to resolve domain names (why?). Though from
+        # what I can gather (https://git.io/Ju0YR) it is using
+        # the default DNS resolver. This fact _may_ explain a few
+        # persistent differences that I see in my sample data,
+        # which is currently list-3.txt.
+        #
+        # Here is an example session from the box from which I
+        # am currently running tests:
+        #
+        # ```
+        # sbs@localhost ~> host 97dounai.top
+        # 97dounai.top has address 108.160.165.8
+        # 97dounai.top has IPv6 address 2001::4b7e:73c0
+        # sbs@localhost ~> host 97dounai.top 8.8.8.8
+        # Using domain server:
+        # Name: 8.8.8.8
+        # Address: 8.8.8.8#53
+        # Aliases:
+        #
+        # 97dounai.top has address 104.244.46.244
+        # 97dounai.top has IPv6 address 2001::a27d:2005
+        # Host 97dounai.top not found: 2(SERVFAIL)
+        # ```
+        #
+        # Apart from the very interesting SERVFAIL error (why?)
+        # the result we get here is consistent with the current output
+        # of this script for the same host:
+        #
+        # ```
+        # dns/diffs http://97dounai.top/
+        #   only_old_data ['108.160.165.139@AS19679']
+        #   only_new_data ['104.244.46.71@AS13414']
+        # ```
+        #
+        # In fact, 104.244.46.244 is part of AS13414 and
+        # 108.160.165.8 is part of AS19679.
+        #
+        # This seems to me a case where an upstream resolver
+        # is telling lies to our recursive resolver, which
+        # _interestingly_ is something Federico mentioned to
+        # me exactly today. This requires digging in!
+        #
+        self._log(
+            "dns/diffs",
+            target_url,
+            "\n\tonly_old_data",
+            self._annotate_with_asn_org(only_old_data),
+            "\n\tonly_new_data",
+            self._annotate_with_asn_org(only_new_data),
+        )
+
+    def _annotate_with_asn_org(self, data: Set[str]) -> List[str]:
+        out: List[str] = []
+        for entry in data:
+            asn = self._mmdb.get(entry)
+            if asn is None:
+                out.append("{}@AS0".format(entry))
+                continue
+            out.append("{}@AS{}".format(entry, asn["autonomous_system_number"]))
+        return out
 
     def _org_intersection(self, left: List[str], right: List[str]) -> Set[str]:
         left_set = self._build_org_mapping(left)
