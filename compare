@@ -2,10 +2,11 @@
 
 import ipaddress
 import json
+import maxminddb
 import sqlite3
 import sys
 
-from typing import Any
+from typing import Any, Set
 from typing import Dict
 from typing import List
 from typing import Tuple
@@ -26,9 +27,10 @@ class Main:
 
     __log_http_request_status_code = False
 
-    __log_dns = True
+    __log_dns = False
 
     def __init__(self, config_file: str):
+        self._mmdb = maxminddb.open_database("dbip-asn-lite-2021-09.mmdb")
         self._config = json.load(open(config_file))
         self._conn = sqlite3.connect(self._config["database"])
         self._data: Dict[Tuple[str, str], Any] = {}
@@ -44,24 +46,25 @@ class Main:
         available test helpers."""
         for target_url in open(self._config["input_file"]):
             target_url = target_url.strip()
+            self._increment_counter_for("processing/total")
             try:
                 self._run_with_url(target_url)
             except Exception as exc:
                 self._log("{}: {}".format(target_url, exc))
-                self._increment_counter_for("processing_failed")
+                self._increment_counter_for("processing/exceptions")
             else:
-                self._increment_counter_for("processing_succeeded")
+                self._increment_counter_for("processing/succeeded")
         json.dump(self._stats, sys.stdout, sort_keys=True)
 
     def _run_with_url(self, target_url: str):
         old_id = (self._config["helpers"]["old"], target_url)
         if old_id not in self._data:
-            self._increment_counter_for("missing_oldth_measurement")
+            self._increment_counter_for("processing/missing_oldth_measurement")
             return
         old_data = self._data[old_id]
         new_id = (self._config["helpers"]["new"], target_url)
         if new_id not in self._data:
-            self._increment_counter_for("missing_newth_measurement")
+            self._increment_counter_for("processing/missing_newth_measurement")
             return
         new_data = self._data[new_id]
         self._compare_tcp_connect(target_url, old_data, new_data)
@@ -148,7 +151,9 @@ class Main:
             self._log(old_data)
             self._log(new_data)
             self._log(
-                '"===== END HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR', target_url, '====="'
+                '"===== END HTTP_REQUEST.BODY_LENGTH DIFFERENCES FOR',
+                target_url,
+                '====="',
             )
 
     def _compare_http_failure(self, target_url: str, old_data: Any, new_data: Any):
@@ -157,10 +162,16 @@ class Main:
             return
         self._increment_counter_for("http_failure")
         if self.__log_http_request_failure:
-            self._log('"===== BEGIN HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="')
+            self._log(
+                '"===== BEGIN HTTP_REQUEST.FAILURE DIFFERENCES FOR',
+                target_url,
+                '====="',
+            )
             self._log(old_data)
             self._log(new_data)
-            self._log('"===== END HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="')
+            self._log(
+                '"===== END HTTP_REQUEST.FAILURE DIFFERENCES FOR', target_url, '====="'
+            )
 
     def _compare_http_title(self, target_url: str, old_data: Any, new_data: Any):
         old_data, new_data = old_data["title"], new_data["title"]
@@ -170,10 +181,14 @@ class Main:
         if len(old_data) < len(new_data):
             self._increment_counter_for("http_title/old_th_smaller")
         if self.__log_http_request_title:
-            self._log('"===== BEGIN HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
+            self._log(
+                '"===== BEGIN HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="'
+            )
             self._log(old_data)
             self._log(new_data)
-            self._log('"===== END HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="')
+            self._log(
+                '"===== END HTTP_REQUEST.TITLE DIFFERENCES FOR', target_url, '====="'
+            )
 
     def _compare_http_headers(self, target_url: str, old_data: Any, new_data: Any):
         # Implementation note: here we only compare the header keys under
@@ -197,10 +212,16 @@ class Main:
             return
         self._increment_counter_for("http_headers")
         if self.__log_http_request_headers:
-            self._log('"===== BEGIN HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="')
+            self._log(
+                '"===== BEGIN HTTP_REQUEST.HEADERS DIFFERENCES FOR',
+                target_url,
+                '====="',
+            )
             for mod, val in diff:
                 self._log(mod, val)
-            self._log('"===== END HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="')
+            self._log(
+                '"===== END HTTP_REQUEST.HEADERS DIFFERENCES FOR', target_url, '====="'
+            )
 
     def _compare_http_status_code(self, target_url: str, old_data: Any, new_data: Any):
         old_data, new_data = old_data["status_code"], new_data["status_code"]
@@ -216,10 +237,13 @@ class Main:
             self._log(old_data)
             self._log(new_data)
             self._log(
-                '"===== END HTTP_REQUEST.STATUS_CODE DIFFERENCES FOR', target_url, '====="'
+                '"===== END HTTP_REQUEST.STATUS_CODE DIFFERENCES FOR',
+                target_url,
+                '====="',
             )
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
+        self._increment_counter_for("dns/total")
         if old_data["dns"]["addrs"] is None:
             self._increment_counter_for("dns/old_data_none_addrs")
             return
@@ -234,6 +258,22 @@ class Main:
         if old_data == new_data:
             self._increment_counter_for("dns/okay")
             return
+        try:
+            diff = self._asn_intersection(old_data, new_data)
+        except ValueError:
+            self._increment_counter_for("dns/cannot_map_to_asn")
+            return
+        if not diff:
+            self._increment_counter_for("dns/same_asn")
+            return
+        try:
+            diff = self._org_intersection(old_data, new_data)
+        except ValueError:
+            self._increment_counter_for("dns/cannot_map_to_org")
+            return
+        if not diff:
+            self._increment_counter_for("dns/same_org")
+            return
         self._increment_counter_for("dns/diffs")
         if self.__log_dns:
             self._log("!!! DNS", target_url)
@@ -242,17 +282,48 @@ class Main:
             self._log(new_data)
             self._log('"===== END DNS DIFFERENCES FOR', target_url, '====="')
 
+    def _org_intersection(self, left: List[str], right: List[str]) -> Set[str]:
+        left_set = self._build_org_mapping(left)
+        right_set = self._build_org_mapping(right)
+        return left_set ^ right_set
+
+    def _build_org_mapping(self, source: List[str]) -> Set[str]:
+        out: Set[str] = set()
+        for entry in source:
+            asn = self._mmdb.get(entry)
+            if asn is None:
+                raise ValueError
+            asn = asn["autonomous_system_organization"]
+            out.add(asn)
+        return out
+
+    def _asn_intersection(self, left: List[str], right: List[str]) -> Set[int]:
+        left_set = self._build_asn_mapping(left)
+        right_set = self._build_asn_mapping(right)
+        return left_set ^ right_set
+
+    def _build_asn_mapping(self, source: List[str]) -> Set[int]:
+        out: Set[int] = set()
+        for entry in source:
+            asn = self._mmdb.get(entry)
+            if asn is None:
+                raise ValueError
+            asn = asn["autonomous_system_number"]
+            out.add(asn)
+        return out
+
     def _clean_dns_data(self, data: List[str]) -> List[str]:
         out: List[str] = []
         for entry in data:
             try:
                 ipaddress.ip_address(entry)
             except ValueError:
-                pass # skip domains
+                pass  # skip domains
             else:
-                if ":" not in entry: # skip IPv6
+                if ":" not in entry:  # skip IPv6
                     out.append(entry)
         return out
+
 
 def main():
     "Main function."
