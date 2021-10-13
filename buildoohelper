@@ -6,7 +6,7 @@ fi
 set -x
 git clone https://github.com/ooni/probe-cli
 cd probe-cli
-git checkout 3747598b4a7f2afd0f599029f7ab411984bd0b86
+git checkout 46e00888aea9bd398d590cef79b58be05878b079
 go build -o ../oohelper ./internal/cmd/oohelper
 cd ..
 rm -rf probe-cli
