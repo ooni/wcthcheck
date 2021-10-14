@@ -123,12 +123,12 @@ class Main:
             return
         if old_data == -1:
             old_data = 0  # This is a bug in the new TH implementation
-        self._increment_counter_for("http_body_length/diff")
+        self._increment_counter_for("http_body_length/mismatch")
         #self._log("body length diff for {}: old={} => new={}".format(target_url, old_data, new_data))
         if old_data > new_data:
-            self._increment_counter_for("http_body_length/diff/new_th_smaller")
+            self._increment_counter_for("http_body_length/mismatch/new_th_smaller")
         else:
-            self._increment_counter_for("http_body_length/diff/new_th_larger")
+            self._increment_counter_for("http_body_length/mismatch/new_th_larger")
 
     def _compare_http_failure(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("http_failure/total")
