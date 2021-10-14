@@ -7,6 +7,7 @@ stores the results into the database.sqlite3 file.
 
 import datetime
 import json
+import multiprocessing
 import random
 import sqlite3
 import subprocess
@@ -14,6 +15,7 @@ import sys
 
 from typing import Dict
 from typing import List
+from typing import Optional
 from typing import Tuple
 
 
@@ -35,49 +37,60 @@ class Main:
             self._known_urls[(backend, target)] = True
         self._exec(["./buildoohelper"])  # idempotent script
 
-    def _exec(self, args: List[str]):
-        print("exec:", args, file=sys.stderr)
-        subprocess.run(args, check=True)
-
     def run(self):
-        """walks the test lists and fetches URLs using the
-        available test helpers."""
-        lines = [line for line in open(self._config["input_file"])]
-        random.shuffle(lines)
-        for line in lines:
-            line = line.strip()
-            for helper in self._config["helpers"].values():
-                self._run_with_single_helper(helper, line)
+        "Walks the test lists and fetches URLs using the available test helpers."
+        with multiprocessing.Pool() as pool:
+            for output in pool.imap_unordered(self._child_main, self._iterate_input()):
+                if output is None:
+                    continue
+                backend_url, target_url, data = output
+                self._commit(backend_url, target_url, data)
 
-    def _run_with_single_helper(self, backend_url: str, target_url: str):
-        if (backend_url, target_url) in self._known_urls:
-            return
+    def _iterate_input(self):
+        helpers = self._config["helpers"].values()
+        with open(self._config["input_file"]) as filep:
+            for line in filep:
+                target_url = line.strip()
+                for backend_url in helpers:
+                    input = (backend_url, target_url)
+                    if input in self._known_urls:
+                        continue
+                    yield input
+
+    @staticmethod
+    def _child_main(input: Tuple[str, str]) -> Optional[Tuple[str, str, bytes]]:
+        backend_url, target_url = input
+        argv = [
+            "./oohelper",
+            "-target",
+            target_url,
+            "-server",
+            backend_url,
+        ]
+        print("exec:", argv, file=sys.stderr)
         try:
-            self._run_with_single_helper_internal(backend_url, target_url)
+            stdout = subprocess.run(argv, check=True, stdout=subprocess.PIPE).stdout
         except Exception as exc:
             print(exc, file=sys.stderr)
+            return None
+        return (backend_url, target_url, stdout)
 
-    def _run_with_single_helper_internal(self, backend_url: str, target_url: str):
+    def _commit(self, backend_url: str, target_url: str, data: bytes):
         date = datetime.datetime.now().astimezone().isoformat()
-        out = self._exec_and_get_output(
-            [
-                "./oohelper",
-                "-target",
-                target_url,
-                "-server",
-                backend_url,
-            ]
-        )
-        json.loads(out)  # ensure it's valid JSON
+        try:
+            json.loads(data)  # ensure it's valid JSON
+        except Exception as exc:
+            print(exc, file=sys.stderr)
+            return
         self._conn.execute(
             """INSERT INTO results VALUES(?, ?, ?, ?)""",
-            (date, backend_url, target_url, out),
+            (date, backend_url, target_url, data),
         )
         self._conn.commit()
 
-    def _exec_and_get_output(self, args: List[str]) -> bytes:
+    def _exec(self, args: List[str]):
         print("exec:", args, file=sys.stderr)
-        return subprocess.run(args, check=True, stdout=subprocess.PIPE).stdout
+        subprocess.run(args, check=True)
 
 
 def main():
