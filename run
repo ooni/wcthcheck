@@ -39,7 +39,7 @@ class Main:
 
     def run(self):
         "Walks the test lists and fetches URLs using the available test helpers."
-        with multiprocessing.Pool() as pool:
+        with multiprocessing.Pool(8) as pool:
             for output in pool.imap_unordered(self._child_main, self._iterate_input()):
                 if output is None:
                     continue
