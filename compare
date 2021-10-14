@@ -28,8 +28,7 @@ class Main:
             self._data[(backend, target)] = json.loads(entry[2])
 
     def run(self):
-        """walks the test lists and fetches URLs using the
-        available test helpers."""
+        "walks the test lists and checks whether the two THs agree."
         for target_url in open(self._config["input_file"]):
             target_url = target_url.strip()
             self._increment_counter_for("processing/total")
