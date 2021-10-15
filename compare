@@ -252,9 +252,16 @@ class Main:
         if old_data["failure"] is None and new_data["failure"] is not None:
             self._increment_counter_for("http_status_code/failure/new", target_url)
             return
+        old_please_wait = old_data["title"] == "Please Wait... | Cloudflare"
         old_data, new_data = old_data["status_code"], new_data["status_code"]
         if old_data == new_data:
             self._increment_counter_for("http_status_code/match", target_url)
+            return
+        if old_data == 403 and new_data == 200:
+            if old_please_wait:
+                self._increment_counter_for("http_status_code/cf", target_url)
+                return
+            self._increment_counter_for("http_status_code/403_becomes_200", target_url)
             return
         self._increment_counter_for("http_status_code/mismatch", target_url)
         #self._log(target_url, old_data, new_data)
