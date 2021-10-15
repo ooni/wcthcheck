@@ -252,6 +252,8 @@ class Main:
         if old_data["failure"] is None and new_data["failure"] is not None:
             self._increment_counter_for("http_status_code/failure/new", target_url)
             return
+        old_failure = old_data["failure"]
+        new_failure = new_data["failure"]
         old_please_wait = old_data["title"] == "Please Wait... | Cloudflare"
         new_one_moment = new_data["title"].startswith("One moment while we securely")
         old_data, new_data = old_data["status_code"], new_data["status_code"]
@@ -264,20 +266,16 @@ class Main:
                 return
             self._increment_counter_for("http_status_code/403_becomes_200/other", target_url)
             return
-        if old_data == 503 and new_data == 200:
-            self._increment_counter_for("http_status_code/503_becomes_200", target_url)
-            return
         if old_data == 403 and new_data == 503:
             if new_one_moment:
                 self._increment_counter_for("http_status_code/403_becomes_503/cf", target_url)
                 return
             self._increment_counter_for("http_status_code/403_becomes_503/other", target_url)
             return
-        if old_data == 308 and new_data == 200:
-            self._increment_counter_for("http_status_code/308_becomes_200", target_url)
+        if old_failure == new_failure and old_data == -1 and new_data == 200:
+            self._increment_counter_for("http_status_code/error_reading_body", target_url)
             return
-        self._increment_counter_for("http_status_code/mismatch", target_url)
-        #self._log(target_url, old_data, new_data)
+        self._increment_counter_for(f"http_status_code/{old_data}_becomes_{new_data}", target_url)
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("dns/total", target_url)
