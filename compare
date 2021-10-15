@@ -182,6 +182,12 @@ class Main:
         self._increment_counter_for("http_title/mismatch/other", target_url)
 
     def _compare_http_headers(self, target_url: str, old_data: Any, new_data: Any):
+        if old_data["failure"] is not None and new_data["failure"] is None:
+            self._increment_counter_for("http_headers/failure/old", target_url)
+            return
+        if old_data["failure"] is None and new_data["failure"] is not None:
+            self._increment_counter_for("http_headers/failure/new", target_url)
+            return
         # Implementation note: here we only compare the header keys under
         # the (reasonable?) assumption it is hard to compare values
         self._increment_counter_for("http_headers/total", target_url)
@@ -228,21 +234,15 @@ class Main:
         ])
         old_data = old_data - common_headers
         new_data = new_data - common_headers
-        # We additionally filter other uncommon headers that it may
-        # make sense to consider quite implementation dependent
-        uncommon_headers_that_feels_safe_filtering = set([
-            "content-length",
-            "connection",
-            "keep-alive", # http://papuapost.com/
-        ])
-        old_data = old_data - uncommon_headers_that_feels_safe_filtering
-        new_data = new_data - uncommon_headers_that_feels_safe_filtering
+        if len(old_data) < 1 and len(new_data) < 1:
+            self._increment_counter_for("http_headers/match/no_header_left", target_url)
+            return
         header_diff = old_data ^ new_data
         if not header_diff:
             self._increment_counter_for("http_headers/match/same_set", target_url)
             return
         self._increment_counter_for("http_headers/mismatch/set_diff", target_url)
-        #self._log(target_url, header_diff, file=sys.stderr)
+        self._log(target_url, header_diff)
 
     def _compare_http_status_code(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("http_status_code/total", target_url)
