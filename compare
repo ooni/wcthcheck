@@ -232,6 +232,7 @@ class Main:
         uncommon_headers_that_feels_safe_filtering = set([
             "content-length",
             "connection",
+            "keep-alive", # http://papuapost.com/
         ])
         old_data = old_data - uncommon_headers_that_feels_safe_filtering
         new_data = new_data - uncommon_headers_that_feels_safe_filtering
