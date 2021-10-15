@@ -97,14 +97,6 @@ class Main:
                 # Here we are skipping IPv6 addresses _because_ we know
                 # the old test helper cannot handle them.
                 continue
-            if v["failure"] == "connection_refused_error":
-                # Here we are normalizing the values returned by the
-                # legacy TH to be the same of the new TH. Ugly.
-                v["failure"] = "connection_refused"
-            if v["failure"] is not None and v["failure"].endswith("no route to host"):
-                # Here we are normalizing the values returned by the
-                # new TH to be the same of the old TH. Ugly.
-                v["failure"] = "connect_error"
             out[k] = v
         return out
 
@@ -123,8 +115,6 @@ class Main:
         old_data, new_data = old_data["body_length"], new_data["body_length"]
         if old_data == new_data:
             return
-        if old_data == -1:
-            old_data = 0  # This is a bug in the new TH implementation
         self._increment_counter_for("http_body_length/mismatch")
         self._log("body length diff for {}: old={} => new={}".format(target_url, old_data, new_data))
         if old_data > new_data:
