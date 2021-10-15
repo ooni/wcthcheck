@@ -26,7 +26,7 @@ def main():
     stats = sqlite3.connect(config["stats"])
     cursor = stats.execute("SELECT key, url FROM stats WHERE key = ?;", (sys.argv[2],))
     for url in (url[1] for url in cursor):
-        print(f"{url}", file=sys.stderr)
+        print(f"{url}")
 
 
 if __name__ == "__main__":
