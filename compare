@@ -3,6 +3,7 @@
 import ipaddress
 import json
 import maxminddb
+import os
 import sqlite3
 import sys
 
@@ -20,7 +21,7 @@ class Main:
         self._config = json.load(open(config_file))
         self._conn = sqlite3.connect(self._config["database"])
         self._data: Dict[Tuple[str, str], Any] = {}
-        self._stats: Dict[str, int] = {}
+        self._stats: Dict[str, Set[str]] = {}
         cur = self._conn.execute("select backend, target, json from results;")
         for entry in cur:
             backend: str = str(entry[0])
@@ -31,64 +32,84 @@ class Main:
         "walks the test lists and checks whether the two THs agree."
         for target_url in open(self._config["input_file"]):
             target_url = target_url.strip()
-            self._increment_counter_for("processing/total")
+            self._increment_counter_for("processing/total", target_url)
             try:
                 self._run_with_url(target_url)
             except Exception as exc:
                 self._log("{}: {}".format(target_url, exc))
-                self._increment_counter_for("processing/exceptions")
+                self._increment_counter_for("processing/exceptions", target_url)
             else:
-                self._increment_counter_for("processing/succeeded")
-        json.dump(self._stats, sys.stdout, sort_keys=True)
+                self._increment_counter_for("processing/succeeded", target_url)
+        self._reporting()
+
+    def _reporting(self):
+        # We store into an extra database which URL has which issue or
+        # issues and we also dump numeric stats to stdout
+        statsdb = self._config["stats"]
+        try:
+            os.remove(statsdb)
+        except:
+            pass # remove if existing (is there a better way?)
+        db = sqlite3.connect(statsdb)
+        db.execute("CREATE TABLE stats(key STRING, url STRING);")
+        stats: Dict[str, int] = {}
+        for key, value in self._stats.items():
+            for url in value:
+                db.execute("INSERT INTO stats VALUES(?, ?)", (key, url))
+            stats[key] = len(value)
+        db.commit()
+        db.close()
+        self._log(f"written database '{statsdb}' with interesting URLs")
+        json.dump(stats, sys.stdout, sort_keys=True)
 
     def _run_with_url(self, target_url: str):
         old_id = (self._config["helpers"]["old"], target_url)
         new_id = (self._config["helpers"]["new"], target_url)
         if old_id not in self._data and new_id not in self._data:
-            self._increment_counter_for("processing/still_missing")
+            self._increment_counter_for("processing/still_missing", target_url)
             return
         if old_id not in self._data:
-            self._increment_counter_for("processing/mismatch/missing_oldth_measurement")
+            self._increment_counter_for("processing/mismatch/missing_oldth_measurement", target_url)
             return
         old_data = self._data[old_id]
         if new_id not in self._data:
-            self._increment_counter_for("processing/mismatch/missing_newth_measurement")
+            self._increment_counter_for("processing/mismatch/missing_newth_measurement", target_url)
             return
-        self._increment_counter_for("processing/match/has_both_measurements")
+        self._increment_counter_for("processing/match/has_both_measurements", target_url)
         new_data = self._data[new_id]
         self._compare_tcp_connect(target_url, old_data, new_data)
         self._compare_http_request(target_url, old_data, new_data)
         self._compare_dns(target_url, old_data, new_data)
 
-    def _increment_counter_for(self, key: str) -> None:
-        self._stats.setdefault(key, 0)
-        self._stats[key] += 1
+    def _increment_counter_for(self, key: str, target_url: str) -> None:
+        self._stats.setdefault(key, set())
+        self._stats[key].add(target_url)
 
     def _log(self, *args: Any) -> None:
         print(*args, file=sys.stderr)
 
     def _compare_tcp_connect(self, target_url: str, old_data: Any, new_data: Any):
-        self._increment_counter_for("tcp_connect/total")
+        self._increment_counter_for("tcp_connect/total", target_url)
         old_data, new_data = old_data["tcp_connect"], new_data["tcp_connect"]
         old_data = self._filter_tcp_connect(old_data)
         new_data = self._filter_tcp_connect(new_data)
         diff: Any = []
         for epnt, result in old_data.items():
             if epnt not in new_data:
-                self._increment_counter_for("tcp_connect/mismatch/removed_ivp4")
+                self._increment_counter_for("tcp_connect/mismatch/removed_ivp4", target_url)
                 diff.append(("-", epnt))
             elif result != new_data[epnt]:
-                self._increment_counter_for("tcp_connect/mismatch/different_ivp4")
+                self._increment_counter_for("tcp_connect/mismatch/different_ivp4", target_url)
                 diff.append(("!", epnt))
         for epnt, result in new_data.items():
             if epnt not in old_data:
-                self._increment_counter_for("tcp_connect/mismatch/added_ivp4")
+                self._increment_counter_for("tcp_connect/mismatch/added_ivp4", target_url)
                 diff.append(("+", epnt))
         if not diff:
-            self._increment_counter_for("tcp_connect/match")
+            self._increment_counter_for("tcp_connect/match", target_url)
             return
         self._log("tcp connect mismatch", target_url, "***'", old_data, "'***", "***'", new_data, "'***")
-        self._increment_counter_for("tcp_connect/mismatch")
+        self._increment_counter_for("tcp_connect/mismatch", target_url)
 
     def _filter_tcp_connect(self, data: Any) -> Any:
         out: Dict[Any, Any] = {}
@@ -111,68 +132,68 @@ class Main:
         self._compare_http_status_code(target_url, old_data, new_data)
 
     def _compare_http_body_length(self, target_url: str, old_data: Any, new_data: Any):
-        self._increment_counter_for("http_body_length/total")
+        self._increment_counter_for("http_body_length/total", target_url)
         old_data, new_data = old_data["body_length"], new_data["body_length"]
         if old_data == new_data:
             return
-        self._increment_counter_for("http_body_length/mismatch")
+        self._increment_counter_for("http_body_length/mismatch", target_url)
         self._log("body length diff for {}: old={} => new={}".format(target_url, old_data, new_data))
         if old_data > new_data:
-            self._increment_counter_for("http_body_length/mismatch/new_th_smaller")
+            self._increment_counter_for("http_body_length/mismatch/new_th_smaller", target_url)
         else:
-            self._increment_counter_for("http_body_length/mismatch/new_th_larger")
+            self._increment_counter_for("http_body_length/mismatch/new_th_larger", target_url)
 
     def _compare_http_failure(self, target_url: str, old_data: Any, new_data: Any):
-        self._increment_counter_for("http_failure/total")
+        self._increment_counter_for("http_failure/total", target_url)
         old_data, new_data = old_data["failure"], new_data["failure"]
         if old_data == new_data:
-            self._increment_counter_for("http_failure/match")
+            self._increment_counter_for("http_failure/match", target_url)
             return
-        self._increment_counter_for("http_failure/mismatch")
+        self._increment_counter_for("http_failure/mismatch", target_url)
         if old_data is None and new_data is not None:
-            self._increment_counter_for("http_failure/mismatch/old_is_none")
+            self._increment_counter_for("http_failure/mismatch/old_is_none", target_url)
             return
         if old_data is not None and new_data is None:
-            self._increment_counter_for("http_failure/mismatch/new_is_none")
+            self._increment_counter_for("http_failure/mismatch/new_is_none", target_url)
             return
-        self._increment_counter_for("http_failure/mismatch/other")
+        self._increment_counter_for("http_failure/mismatch/other", target_url)
         #self._log("http failure mismatch for {}: old={} => new={}".format(target_url, old_data, new_data))
 
     def _compare_http_title(self, target_url: str, old_data: Any, new_data: Any):
-        self._increment_counter_for("http_title/total")
+        self._increment_counter_for("http_title/total", target_url)
         old_data, new_data = old_data["title"], new_data["title"]
         if old_data == "" and new_data == "":
-            self._increment_counter_for("http_title/match/both_empty")
+            self._increment_counter_for("http_title/match/both_empty", target_url)
             return
         if old_data == new_data:
-            self._increment_counter_for("http_title/match/equal")
+            self._increment_counter_for("http_title/match/equal", target_url)
             return
         #self._log("title mismatch", target_url, "'", old_data, "'", "'", new_data, "'")
-        self._increment_counter_for("http_title/mismatch/total")
+        self._increment_counter_for("http_title/mismatch/total", target_url)
         if old_data == "":
-            self._increment_counter_for("http_title/mismatch/old_empty")
+            self._increment_counter_for("http_title/mismatch/old_empty", target_url)
             return
         if new_data == "":
-            self._increment_counter_for("http_title/mismatch/new_empty")
+            self._increment_counter_for("http_title/mismatch/new_empty", target_url)
             return
         if len(old_data) < len(new_data):
-            self._increment_counter_for("http_title/mismatch/old_th_smaller")
+            self._increment_counter_for("http_title/mismatch/old_th_smaller", target_url)
             return
-        self._increment_counter_for("http_title/mismatch/other")
+        self._increment_counter_for("http_title/mismatch/other", target_url)
 
     def _compare_http_headers(self, target_url: str, old_data: Any, new_data: Any):
         # Implementation note: here we only compare the header keys under
         # the (reasonable?) assumption it is hard to compare values
-        self._increment_counter_for("http_headers/total")
+        self._increment_counter_for("http_headers/total", target_url)
         old_data, new_data = old_data["headers"], new_data["headers"]
         if old_data is None and new_data is None:
-            self._increment_counter_for("http_headers/match/both_none")
+            self._increment_counter_for("http_headers/match/both_none", target_url)
             return
         if old_data is None:
-            self._increment_counter_for("http_headers/mismatch/old_is_none")
+            self._increment_counter_for("http_headers/mismatch/old_is_none", target_url)
             return
         if new_data is None:
-            self._increment_counter_for("http_headers/mismatch/new_is_none")
+            self._increment_counter_for("http_headers/mismatch/new_is_none", target_url)
             return
         old_data = set([k.lower() for k in old_data.keys()])
         new_data = set([k.lower() for k in new_data.keys()])
@@ -217,54 +238,54 @@ class Main:
         new_data = new_data - uncommon_headers_that_feels_safe_filtering
         header_diff = old_data ^ new_data
         if not header_diff:
-            self._increment_counter_for("http_headers/match/same_set")
+            self._increment_counter_for("http_headers/match/same_set", target_url)
             return
-        self._increment_counter_for("http_headers/mismatch/set_diff")
+        self._increment_counter_for("http_headers/mismatch/set_diff", target_url)
         #self._log(target_url, header_diff, file=sys.stderr)
 
     def _compare_http_status_code(self, target_url: str, old_data: Any, new_data: Any):
-        self._increment_counter_for("http_status_code/total")
+        self._increment_counter_for("http_status_code/total", target_url)
         old_data, new_data = old_data["status_code"], new_data["status_code"]
         if old_data == new_data:
-            self._increment_counter_for("http_status_code/match")
+            self._increment_counter_for("http_status_code/match", target_url)
             return
-        self._increment_counter_for("http_status_code/mismatch")
+        self._increment_counter_for("http_status_code/mismatch", target_url)
         #self._log(target_url, old_data, new_data)
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
-        self._increment_counter_for("dns/total")
+        self._increment_counter_for("dns/total", target_url)
         old_data = old_data["dns"]["addrs"]
         new_data = new_data["dns"]["addrs"]
         if old_data is None and new_data is None:
-            self._increment_counter_for("dns/match/both_none")
+            self._increment_counter_for("dns/match/both_none", target_url)
             return
         if old_data is None:
-            self._increment_counter_for("dns/mismatch/old_data_none_addrs")
+            self._increment_counter_for("dns/mismatch/old_data_none_addrs", target_url)
             return
         if new_data is None:
-            self._increment_counter_for("dns/mismatch/new_data_none_addrs")
+            self._increment_counter_for("dns/mismatch/new_data_none_addrs", target_url)
             return
         old_data = self._clean_dns_data(old_data)
         new_data = self._clean_dns_data(new_data)
         old_data, new_data = sorted(old_data), sorted(new_data)
         if old_data == new_data:
-            self._increment_counter_for("dns/match/exactly")
+            self._increment_counter_for("dns/match/exactly", target_url)
             return
         try:
             diff = self._asn_intersection(old_data, new_data)
         except ValueError:
-            self._increment_counter_for("dns/mismatch/cannot_map_to_asn")
+            self._increment_counter_for("dns/mismatch/cannot_map_to_asn", target_url)
             return
         if not diff:
-            self._increment_counter_for("dns/match/same_asn")
+            self._increment_counter_for("dns/match/same_asn", target_url)
             return
         try:
             diff = self._org_intersection(old_data, new_data)
         except ValueError:
-            self._increment_counter_for("dns/mismatch/cannot_map_to_org")
+            self._increment_counter_for("dns/mismatch/cannot_map_to_org", target_url)
             return
         if not diff:
-            self._increment_counter_for("dns/match/same_org")
+            self._increment_counter_for("dns/match/same_org", target_url)
             return
         #
         # Important note regarding the differences I see. I was
@@ -317,9 +338,9 @@ class Main:
             "http://97dounai.top/"
         ])
         if target_url in possibly_poisoned_entries:
-            self._increment_counter_for("dns/ignore/possibly_poisoned")
+            self._increment_counter_for("dns/ignore/possibly_poisoned", target_url)
             return
-        self._increment_counter_for("dns/mismatch/other")
+        self._increment_counter_for("dns/mismatch/other", target_url)
         # Commented out code to dig into this
         '''
         only_old_data = set(old_data) - set(new_data)
