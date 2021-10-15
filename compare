@@ -66,7 +66,7 @@ class Main:
         old_id = (self._config["helpers"]["old"], target_url)
         new_id = (self._config["helpers"]["new"], target_url)
         if old_id not in self._data and new_id not in self._data:
-            self._increment_counter_for("processing/still_missing", target_url)
+            self._increment_counter_for("processing/match/both_missing", target_url)
             return
         if old_id not in self._data:
             self._increment_counter_for("processing/mismatch/missing_oldth_measurement", target_url)
