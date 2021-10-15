@@ -6,7 +6,7 @@ config file and matching a specific category.
 
 For example:
 
-    ./reprocess config-7.json "dns/mismatch/new_data_none_addrs"
+    ./reprocesscategory config-7.json "dns/mismatch/new_data_none_addrs"
 
 Will remove from the database specified inside config-7.json
 all the URLs classified with the specified dns/mismatch category.
