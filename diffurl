@@ -21,7 +21,7 @@ def main():
         "SELECT backend, json FROM results WHERE target = ?;", (target_url,)
     )
     for backend, jsondata in cursor:
-        print(f"======= {target_url} @ {backend} =======")
+        print(f"======= ./oohelper -target {target_url} -server {backend} =======")
         print("{}".format(json.dumps(json.loads(jsondata), indent=2)))
 
 
