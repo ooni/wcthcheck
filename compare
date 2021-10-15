@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from urllib import parse
 import ipaddress
 import json
 import maxminddb
@@ -268,6 +269,19 @@ class Main:
             self._increment_counter_for("dns/mismatch/new_failure", target_url)
             return
         if old_err is not None and new_err is None:
+            # The old TH does not correctly handle input where the URL
+            # contains an IP address, which breaks the comparison.
+            try:
+                url = parse.urlsplit(target_url)
+                try:
+                    ipaddress.ip_address(url.hostname)
+                except:
+                    pass # just fallthrough
+                else:
+                    self._increment_counter_for("dns/known_bug/old_cannot_handle_ip", target_url)
+                    return
+            except:
+                pass # just flag it as dns/mismatch/old_failure
             self._increment_counter_for("dns/mismatch/old_failure", target_url)
             return
         if old_data is None and new_data is None:
