@@ -162,13 +162,9 @@ class Main:
     def _compare_http_title(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("http_title/total", target_url)
         old_data, new_data = old_data["title"], new_data["title"]
-        if old_data == "" and new_data == "":
-            self._increment_counter_for("http_title/match/both_empty", target_url)
-            return
         if old_data == new_data:
             self._increment_counter_for("http_title/match/equal", target_url)
             return
-        #self._log("title mismatch", target_url, "'", old_data, "'", "'", new_data, "'")
         self._increment_counter_for("http_title/mismatch/total", target_url)
         if old_data == "":
             self._increment_counter_for("http_title/mismatch/old_empty", target_url)
@@ -178,6 +174,9 @@ class Main:
             return
         if len(old_data) < len(new_data):
             self._increment_counter_for("http_title/mismatch/old_th_smaller", target_url)
+            return
+        if len(old_data) > len(new_data):
+            self._increment_counter_for("http_title/mismatch/old_th_larger", target_url)
             return
         self._increment_counter_for("http_title/mismatch/other", target_url)
 
