@@ -43,11 +43,14 @@ class Main:
 
     def _run_with_url(self, target_url: str):
         old_id = (self._config["helpers"]["old"], target_url)
+        new_id = (self._config["helpers"]["new"], target_url)
+        if old_id not in self._data and new_id not in self._data:
+            self._increment_counter_for("processing/still_missing")
+            return
         if old_id not in self._data:
             self._increment_counter_for("processing/mismatch/missing_oldth_measurement")
             return
         old_data = self._data[old_id]
-        new_id = (self._config["helpers"]["new"], target_url)
         if new_id not in self._data:
             self._increment_counter_for("processing/mismatch/missing_newth_measurement")
             return
@@ -123,7 +126,7 @@ class Main:
         if old_data == -1:
             old_data = 0  # This is a bug in the new TH implementation
         self._increment_counter_for("http_body_length/mismatch")
-        #self._log("body length diff for {}: old={} => new={}".format(target_url, old_data, new_data))
+        self._log("body length diff for {}: old={} => new={}".format(target_url, old_data, new_data))
         if old_data > new_data:
             self._increment_counter_for("http_body_length/mismatch/new_th_smaller")
         else:
