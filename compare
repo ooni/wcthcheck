@@ -176,6 +176,8 @@ class Main:
             return
         old_data = set([k.lower() for k in old_data.keys()])
         new_data = set([k.lower() for k in new_data.keys()])
+        # We limit comparison to just the headers that probes
+        # will consider to choose whether there's blocking
         common_headers = set([
 		    "date",
 		    "content-type",
@@ -203,10 +205,10 @@ class Main:
 	    	"link",
 	    	"x-varnish",
         ])
-        # We limit comparison to just the headers that probes
-        # will consider to choose whether there's blocking
         old_data = old_data - common_headers
         new_data = new_data - common_headers
+        # We additionally filter other uncommon headers that it may
+        # make sense to consider quite implementation dependent
         uncommon_headers_that_feels_safe_filtering = set([
             "content-length",
             "connection",
