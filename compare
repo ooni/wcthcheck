@@ -273,6 +273,9 @@ class Main:
                 return
             self._increment_counter_for("http_status_code/403_becomes_503/other", target_url)
             return
+        if old_data == 308 and new_data == 200:
+            self._increment_counter_for("http_status_code/308_becomes_200", target_url)
+            return
         self._increment_counter_for("http_status_code/mismatch", target_url)
         #self._log(target_url, old_data, new_data)
 
