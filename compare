@@ -266,9 +266,6 @@ class Main:
         if not diff:
             self._increment_counter_for("dns/match/same_org")
             return
-        self._increment_counter_for("dns/mismatch/other")
-        only_old_data = set(old_data) - set(new_data)
-        only_new_data = set(new_data) - set(old_data)
         #
         # Important note regarding the differences I see. I was
         # under the assumption that the test helper was using
@@ -316,7 +313,17 @@ class Main:
         #
         # See https://github.com/ooni/probe/issues/1780
         #
+        possibly_poisoned_entries = set([
+            "http://97dounai.top/"
+        ])
+        if target_url in possibly_poisoned_entries:
+            self._increment_counter_for("dns/ignore/possibly_poisoned")
+            return
+        self._increment_counter_for("dns/mismatch/other")
+        # Commented out code to dig into this
         '''
+        only_old_data = set(old_data) - set(new_data)
+        only_new_data = set(new_data) - set(old_data)
         self._log(
             "dns/diffs",
             target_url,
