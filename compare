@@ -254,8 +254,22 @@ class Main:
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("dns/total", target_url)
+        old_err = old_data["dns"]["failure"]
+        new_err = new_data["dns"]["failure"]
         old_data = old_data["dns"]["addrs"]
         new_data = new_data["dns"]["addrs"]
+        if old_err is not None and new_err is not None:
+            if old_err == new_err:
+                self._increment_counter_for("dns/match/same_failure", target_url)
+                return
+            self._increment_counter_for("dns/mismatch/different_failure", target_url)
+            return
+        if old_err is None and new_err is not None:
+            self._increment_counter_for("dns/mismatch/old_failure", target_url)
+            return
+        if old_err is None and new_err is not None:
+            self._increment_counter_for("dns/mismatch/new_failure", target_url)
+            return
         if old_data is None and new_data is None:
             self._increment_counter_for("dns/match/both_none", target_url)
             return
