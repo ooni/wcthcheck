@@ -233,14 +233,17 @@ class Main:
 
     def _compare_dns(self, target_url: str, old_data: Any, new_data: Any):
         self._increment_counter_for("dns/total")
-        if old_data["dns"]["addrs"] is None:
-            self._increment_counter_for("dns/mismatch/old_data_none_addrs")
-            return
-        if new_data["dns"]["addrs"] is None:
-            self._increment_counter_for("dns/mismatch/new_data_none_addrs")
-            return
         old_data = old_data["dns"]["addrs"]
         new_data = new_data["dns"]["addrs"]
+        if old_data is None and new_data is None:
+            self._increment_counter_for("dns/match/both_none")
+            return
+        if old_data is None:
+            self._increment_counter_for("dns/mismatch/old_data_none_addrs")
+            return
+        if new_data is None:
+            self._increment_counter_for("dns/mismatch/new_data_none_addrs")
+            return
         old_data = self._clean_dns_data(old_data)
         new_data = self._clean_dns_data(new_data)
         old_data, new_data = sorted(old_data), sorted(new_data)
