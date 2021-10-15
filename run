@@ -8,7 +8,6 @@ stores the results into the database.sqlite3 file.
 import datetime
 import json
 import multiprocessing
-import random
 import sqlite3
 import subprocess
 import sys
@@ -39,7 +38,7 @@ class Main:
 
     def run(self):
         "Walks the test lists and fetches URLs using the available test helpers."
-        with multiprocessing.Pool(8) as pool:
+        with multiprocessing.Pool(16) as pool:
             for output in pool.imap_unordered(self._child_main, self._iterate_input()):
                 if output is None:
                     continue
