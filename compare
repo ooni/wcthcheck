@@ -264,10 +264,10 @@ class Main:
             self._increment_counter_for("dns/mismatch/different_failure", target_url)
             return
         if old_err is None and new_err is not None:
-            self._increment_counter_for("dns/mismatch/old_failure", target_url)
-            return
-        if old_err is None and new_err is not None:
             self._increment_counter_for("dns/mismatch/new_failure", target_url)
+            return
+        if old_err is not None and new_err is None:
+            self._increment_counter_for("dns/mismatch/old_failure", target_url)
             return
         if old_data is None and new_data is None:
             self._increment_counter_for("dns/match/both_none", target_url)
