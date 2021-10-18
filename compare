@@ -94,6 +94,15 @@ class Main:
         old_data, new_data = old_data["tcp_connect"], new_data["tcp_connect"]
         old_data = self._filter_tcp_connect(old_data)
         new_data = self._filter_tcp_connect(new_data)
+        if len(new_data) < 1 and len(old_data) < 1:
+            self._increment_counter_for("tcp_connect/match/both_empty", target_url)
+            return
+        if len(new_data) < 1:
+            self._increment_counter_for("tcp_connect/mismatch/new_empty", target_url)
+            return
+        if len(old_data) < 1:
+            self._increment_counter_for("tcp_connect/mismatch/old_empty", target_url)
+            return
         diff: Any = []
         for epnt, result in old_data.items():
             if epnt not in new_data:
@@ -157,7 +166,16 @@ class Main:
         if old_data is not None and new_data is None:
             self._increment_counter_for("http_failure/mismatch/new_is_none", target_url)
             return
-        self._increment_counter_for("http_failure/mismatch/other", target_url)
+        if old_data == "unknown_error":
+            self._increment_counter_for(f"http_failure/mismatch/old_unknown/total", target_url)
+            self._increment_counter_for(f"http_failure/mismatch/old_unknown/new_is_{new_data}", target_url)
+            return
+        if new_data == "unknown_error":
+            self._increment_counter_for(f"http_failure/mismatch/new_unknown/total", target_url)
+            self._increment_counter_for(f"http_failure/mismatch/new_unknown/old_is_{old_data}", target_url)
+            return
+        self._increment_counter_for(f"http_failure/mismatch/other/total", target_url)
+        self._increment_counter_for(f"http_failure/mismatch/other/{old_data}_becomes_{new_data}", target_url)
         #self._log("http failure mismatch for {}: old={} => new={}".format(target_url, old_data, new_data))
 
     def _compare_http_title(self, target_url: str, old_data: Any, new_data: Any):
@@ -287,9 +305,11 @@ class Main:
             if old_err == new_err:
                 self._increment_counter_for("dns/match/same_failure", target_url)
                 return
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/different_failure", target_url)
             return
         if old_err is None and new_err is not None:
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/new_failure", target_url)
             return
         if old_err is not None and new_err is None:
@@ -306,15 +326,18 @@ class Main:
                     return
             except:
                 pass # just flag it as dns/mismatch/old_failure
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/old_failure", target_url)
             return
         if old_data is None and new_data is None:
             self._increment_counter_for("dns/match/both_none", target_url)
             return
         if old_data is None:
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/old_data_none_addrs", target_url)
             return
         if new_data is None:
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/new_data_none_addrs", target_url)
             return
         old_data = self._clean_dns_data(old_data)
@@ -326,6 +349,7 @@ class Main:
         try:
             diff = self._asn_intersection(old_data, new_data)
         except ValueError:
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/cannot_map_to_asn", target_url)
             return
         if not diff:
@@ -334,6 +358,7 @@ class Main:
         try:
             diff = self._org_intersection(old_data, new_data)
         except ValueError:
+            self._increment_counter_for("dns/mismatch", target_url)
             self._increment_counter_for("dns/mismatch/cannot_map_to_org", target_url)
             return
         if not diff:
@@ -392,6 +417,7 @@ class Main:
         if target_url in possibly_poisoned_entries:
             self._increment_counter_for("dns/ignore/possibly_poisoned", target_url)
             return
+        self._increment_counter_for("dns/mismatch", target_url)
         self._increment_counter_for("dns/mismatch/other", target_url)
         # Commented out code to dig into this
         '''
